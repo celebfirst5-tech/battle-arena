@@ -31,32 +31,43 @@ jobs:
             fi
           fi
 
+      - name: Ensure Missing Assets Exist
+        run: |
+          mkdir -p assets
+          if [ ! -f "assets/app_logo.png" ]; then
+            echo "assets/app_logo.png missing tha, fallback logo taiyar kar rahe hain..."
+            if [ -f "assets/home_screen_banner_01.png" ]; then
+              cp assets/home_screen_banner_01.png assets/app_logo.png
+            elif [ -f "assets/banner_01.png" ]; then
+              cp assets/banner_01.png assets/app_logo.png
+            fi
+            echo "assets/app_logo.png ready!"
+          fi
+
       - name: Recreate Clean Android Project
         run: |
-          # FlutLab ke bigde hue android folder ko hatao aur clean android banao
           rm -rf android
           flutter create . --platforms=android --org=com.battlearena --project-name=battle_arena
 
-          # minSdk 23 aur Internet permission set karo
           python3 -c "
           import re
 
-          # Fix build.gradle / build.gradle.kts
           for path in ['android/app/build.gradle', 'android/app/build.gradle.kts']:
               try:
                   with open(path, 'r') as f:
                       content = f.read()
                   content = re.sub(r'minSdk\s*=\s*.*', 'minSdk = 23', content)
                   content = re.sub(r'minSdkVersion\s+.*', 'minSdkVersion 23', content)
-                  content = re.sub(r'compileSdk\s*=\s*.*', 'compileSdk = 34', content)
-                  content = re.sub(r'compileSdkVersion\s+.*', 'compileSdkVersion 34', content)
+                  content = re.sub(r'compileSdk\s*=\s*.*', 'compileSdk = 36', content)
+                  content = re.sub(r'compileSdkVersion\s+.*', 'compileSdkVersion 36', content)
+                  content = re.sub(r'targetSdk\s*=\s*.*', 'targetSdk = 34', content)
+                  content = re.sub(r'targetSdkVersion\s+.*', 'targetSdkVersion 34', content)
                   with open(path, 'w') as f:
                       f.write(content)
                   print('Updated', path)
               except FileNotFoundError:
                   pass
 
-          # Fix AndroidManifest label to Battle Arena
           manifest_path = 'android/app/src/main/AndroidManifest.xml'
           try:
               with open(manifest_path, 'r') as f:
@@ -81,4 +92,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BattleArena-Release-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/*.apk
+          
