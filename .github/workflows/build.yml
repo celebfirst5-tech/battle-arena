@@ -10,52 +10,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Extract Project ZIP
-        run: |
-          unzip -o *.zip
-          if [ ! -f "pubspec.yaml" ]; then
-            SUBDIR=$(find . -maxdepth 2 -name "pubspec.yaml" -exec dirname {} \;)
-            if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "." ]; then
-              cp -r $SUBDIR/* .
-            fi
-          fi
-          ls -la
-
-      - name: Fix Android Manifest
-        run: |
-          mkdir -p android/app/src/main
-          cat << 'EOF' > android/app/src/main/AndroidManifest.xml
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET"/>
-              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-              <application
-                  android:label="Battle Arena"
-                  android:name="${applicationName}"
-                  android:icon="@mipmap/ic_launcher">
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true"
-                      android:launchMode="singleTop"
-                      android:theme="@style/LaunchTheme"
-                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-                      android:hardwareAccelerated="true"
-                      android:windowSoftInputMode="adjustResize">
-                      <meta-data
-                        android:name="io.flutter.embedding.android.NormalTheme"
-                        android:resource="@style/NormalTheme"
-                        />
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-                  </activity>
-                  <meta-data
-                      android:name="flutterEmbedding"
-                      android:value="2" />
-              </application>
-          </manifest>
-          EOF
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -66,6 +20,56 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+
+      - name: Extract Project ZIP
+        run: |
+          unzip -o *.zip
+          if [ ! -f "pubspec.yaml" ]; then
+            SUBDIR=$(find . -maxdepth 2 -name "pubspec.yaml" -exec dirname {} \;)
+            if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "." ]; then
+              cp -r $SUBDIR/* .
+            fi
+          fi
+
+      - name: Recreate Clean Android Project
+        run: |
+          # FlutLab ke bigde hue android folder ko hatao aur clean android banao
+          rm -rf android
+          flutter create . --platforms=android --org=com.battlearena --project-name=battle_arena
+
+          # minSdk 23 aur Internet permission set karo
+          python3 -c "
+          import re
+
+          # Fix build.gradle / build.gradle.kts
+          for path in ['android/app/build.gradle', 'android/app/build.gradle.kts']:
+              try:
+                  with open(path, 'r') as f:
+                      content = f.read()
+                  content = re.sub(r'minSdk\s*=\s*.*', 'minSdk = 23', content)
+                  content = re.sub(r'minSdkVersion\s+.*', 'minSdkVersion 23', content)
+                  content = re.sub(r'compileSdk\s*=\s*.*', 'compileSdk = 34', content)
+                  content = re.sub(r'compileSdkVersion\s+.*', 'compileSdkVersion 34', content)
+                  with open(path, 'w') as f:
+                      f.write(content)
+                  print('Updated', path)
+              except FileNotFoundError:
+                  pass
+
+          # Fix AndroidManifest label to Battle Arena
+          manifest_path = 'android/app/src/main/AndroidManifest.xml'
+          try:
+              with open(manifest_path, 'r') as f:
+                  m = f.read()
+              m = m.replace('android:label=\"battle_arena\"', 'android:label=\"Battle Arena\"')
+              if 'android.permission.INTERNET' not in m:
+                  m = m.replace('<application', '<uses-permission android:name=\"android.permission.INTERNET\"/>\n    <application')
+              with open(manifest_path, 'w') as f:
+                  f.write(m)
+              print('Updated Manifest')
+          except Exception as e:
+              print('Manifest error:', e)
+          "
 
       - name: Get Dependencies
         run: flutter pub get
