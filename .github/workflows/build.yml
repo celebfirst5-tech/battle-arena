@@ -50,7 +50,6 @@ jobs:
           python3 -c "
           import re, os, glob
 
-          # Fix build.gradle.kts (Kotlin DSL)
           kts_path = 'android/app/build.gradle.kts'
           if os.path.exists(kts_path):
               with open(kts_path, 'r') as f:
@@ -68,7 +67,6 @@ jobs:
                   f.write(content)
               print('Patched build.gradle.kts with Desugaring!')
 
-          # Fix build.gradle (Groovy DSL)
           groovy_path = 'android/app/build.gradle'
           if os.path.exists(groovy_path):
               with open(groovy_path, 'r') as f:
@@ -86,7 +84,6 @@ jobs:
                   f.write(content)
               print('Patched build.gradle with Desugaring!')
 
-          # AndroidManifest Label and Internet Permission
           manifest_path = 'android/app/src/main/AndroidManifest.xml'
           try:
               with open(manifest_path, 'r') as f:
@@ -100,61 +97,18 @@ jobs:
           except Exception as e:
               print('Manifest error:', e)
 
-          # Patch main.dart so black screen error never happens
-          safe_main = '''void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(statusBarColor: Colors.transparent, statusBarIconBrightness: Brightness.light));
-  
-  try {
-    await Firebase.initializeApp(options: kFirebaseOptions);
-  } catch (e) {
-    debugPrint('Firebase init: \$e');
-  }
-
-  try {
-    tz.initializeTimeZones();
-  } catch (e) {
-    debugPrint('Timezone error: \$e');
-  }
-
-  try {
-    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
-  } catch (e) {
-    debugPrint('Notification init error: \$e');
-  }
-
-  try {
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    await FirebaseMessaging.instance.requestPermission(alert: true, badge: true, sound: true);
-  } catch (e) {
-    debugPrint('FCM error: \$e');
-  }
-
-  try {
-    FlutterError.onError = (FlutterErrorDetails details) {
-      debugPrint('FlutterError: \${details.exception}');
-    };
-  } catch (e) {
-    debugPrint('Crashlytics error: \$e');
-  }
-
-  runApp(const BattleArenaApp());
-}'''
-
           for main_file in glob.glob('**/main.dart', recursive=True):
               try:
                   with open(main_file, 'r') as f:
-                      txt = f.read()
-                  pattern = r'void\s+main\s*\(\)\s*async\s*\{[\s\S]*?runApp\s*\(\s*const\s+BattleArenaApp\s*\(\s*\)\s*\);\s*\}'
-                  if re.search(pattern, txt):
-                      txt = re.sub(pattern, safe_main, txt)
+                      d = f.read()
+                  target = 'SystemChrome.setSystemUIOverlayStyle('
+                  if target in d and 'runApp(const BattleArenaApp());\n  SystemChrome' not in d:
+                      d = d.replace(target, 'runApp(const BattleArenaApp());\n  SystemChrome.setSystemUIOverlayStyle(')
                       with open(main_file, 'w') as f:
-                          f.write(txt)
-                      print('Safely patched main() in', main_file)
-              except Exception as err:
-                  print('Error patching main:', err)
+                          f.write(d)
+                      print('Patched immediate runApp in', main_file)
+              except Exception as e:
+                  print('Error patching main.dart:', e)
           "
 
       - name: Setup App Launcher Icon
@@ -166,7 +120,7 @@ jobs:
               cp assets/app_logo.png "$d/ic_launcher_round.png" 2>/dev/null || true
             fi
           done
-          echo "Launcher icon successfully set to assets/app_logo.png"
+          echo "App launcher icon set to assets/app_logo.png"
 
       - name: Get Dependencies
         run: flutter pub get
@@ -179,3 +133,4 @@ jobs:
         with:
           name: BattleArena-Release-APK
           path: build/app/outputs/flutter-apk/*.apk
+          
