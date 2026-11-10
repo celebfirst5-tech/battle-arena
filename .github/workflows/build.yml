@@ -31,25 +31,20 @@ jobs:
             fi
           fi
 
-      - name: Ensure Missing Assets Exist
+      - name: Check Firebase Config
         run: |
-          mkdir -p assets
-          if [ ! -f "assets/app_logo.png" ]; then
-            if [ -f "assets/home_screen_banner_01.png" ]; then
-              cp assets/home_screen_banner_01.png assets/app_logo.png
-            elif [ -f "assets/banner_01.png" ]; then
-              cp assets/banner_01.png assets/app_logo.png
-            fi
+          if [ ! -f "android/app/google-services.json" ]; then
+            echo "❌ ERROR: google-services.json is missing in android/app/ folder!"
+            echo "Please add it to your ZIP file."
+            exit 1
           fi
+          echo "✅ google-services.json is present."
 
-      - name: Recreate Clean Android Project
+      - name: Patch Android Config for Desugaring & SDKs
         run: |
-          rm -rf android
-          flutter create . --platforms=android --org=com.battlearena --project-name=battle_arena
-
           python3 -c "
-          import re, os, glob
-
+          import re, os
+          
           kts_path = 'android/app/build.gradle.kts'
           if os.path.exists(kts_path):
               with open(kts_path, 'r') as f:
@@ -66,7 +61,7 @@ jobs:
               with open(kts_path, 'w') as f:
                   f.write(content)
               print('Patched build.gradle.kts with Desugaring!')
-
+              
           groovy_path = 'android/app/build.gradle'
           if os.path.exists(groovy_path):
               with open(groovy_path, 'r') as f:
@@ -96,24 +91,13 @@ jobs:
               print('Updated Manifest')
           except Exception as e:
               print('Manifest error:', e)
-
-          for main_file in glob.glob('**/main.dart', recursive=True):
-              try:
-                  with open(main_file, 'r') as f:
-                      d = f.read()
-                  target = 'SystemChrome.setSystemUIOverlayStyle('
-                  if target in d and 'runApp(const BattleArenaApp());\n  SystemChrome' not in d:
-                      d = d.replace(target, 'runApp(const BattleArenaApp());\n  SystemChrome.setSystemUIOverlayStyle(')
-                      with open(main_file, 'w') as f:
-                          f.write(d)
-                      print('Patched immediate runApp in', main_file)
-              except Exception as e:
-                  print('Error patching main.dart:', e)
           "
 
       - name: Setup App Launcher Icon
         run: |
+          # Purani 26 wali folder hatao (taaki default icon na aaye)
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
+          # Har mipmap folder me naya logo daalo
           for d in android/app/src/main/res/mipmap-*; do
             if [ -d "$d" ]; then
               cp assets/app_logo.png "$d/ic_launcher.png"
@@ -133,4 +117,3 @@ jobs:
         with:
           name: BattleArena-Release-APK
           path: build/app/outputs/flutter-apk/*.apk
-          
